@@ -1,10 +1,11 @@
 # Voter Project Documentation
-The combined data is stored <a href="[your_url_here](https://www.dropbox.com/scl/fo/t1ivhinoc2byyo6v2vcm4/h?rlkey=c7j0qs6l19ceguhlyppgmppwv&dl=0)">here</a>. Every time I receive data, I drop it to this folder. 
+The combined data is stored <a href="[your_url_here](https://www.dropbox.com/scl/fo/t1ivhinoc2byyo6v2vcm4/h?rlkey=c7j0qs6l19ceguhlyppgmppwv&dl=0)">here</a>. Every time I receive data, I drop it to this folder. Prior to uploading it to this folder, I "clean" the data to ensure consistent headers.
 
 
 The only dataset that is relevant to the analysis presented thus far is **AVPv2**
 
-The data are then "cleaned" with the following python code:
+The data are then "cleaned" with the following python code. This file is saved as **clean_headers.py**.
+
 
 ```{python}
 
@@ -58,14 +59,14 @@ def check_header(df, electionList, regInfo):
     for column in df.columns:
         column = re.sub(r'[^a-zA-Z0-9_]', '_', column)
         column = re.sub(r'^\d+', '_', column)
-        valid_columns.append(column)       
-    df.columns = valid_columns  
-    sorted_columns = sorted(df.columns) 
+        valid_columns.append(column)
+    df.columns = valid_columns
+    sorted_columns = sorted(df.columns)
     return df[sorted_columns]
 
 for f in csv_files:
    path_name = os.path.split(f)[-1]
-   match = re.search(r'(\d{4}-\d{2}-\d{2})', path_name)   
+   match = re.search(r'(\d{4}-\d{2}-\d{2})', path_name)
    date = datetime.datetime.strptime(match.group(), '%Y-%m-%d').date()
    df = pd.read_csv(f, low_memory=False)
    df = check_header(df, electionList, regInfo)
@@ -74,14 +75,19 @@ for f in csv_files:
 
 
 ```
-The cleaned data are then uploaded to Google Cloud Storage, they're then turned into a table in Big Query called **combined_0724** Big query is a data warehouse. It's relatively easy to move large datasets around here. It's also easy to query them using standard SQL queries.
+In the **fix_headers** folder, the constituent files all have a **c** prefix. Thus, the data in its original form are located in the dropbox folder and google bucket.
+
+The cleaned data are then uploaded to Google Cloud Storage, they're then turned into a table in Big Query called **combined_0724**  It's relatively easy to move large datasets around here. It's also easy to query them using standard SQL queries.
+
+One important aspect of the project is geocoding the data. I did this locally on ArcGIS. I do this by first extracting all unique addresses from the the data, and save the table as **masterAddresses**. I then download the data, geocode it, and upload it back to GCP and BQ. The table is called **geoCoded0724**. The SQL code to do this is below.
+
 
 ## Geocoding
 
 ```sql
 CREATE OR REPLACE TABLE `az-voter-file.Data_AVP_001.masterRegistrants`AS(
 SELECT
-  registrant_id, 
+  registrant_id,
   (Residence_Address || ', ' || Residence_City || ', ' || County|| ', ' ||  Residence_State || ', ' || Residence_Zip) AS addressInVote,
 FROM
   `az-voter-file.Data_AVP_001.combined_0724`
@@ -93,9 +99,9 @@ SELECT
 FROM
   `az-voter-file.Data_AVP_001.masterRegistrants`
 );
-
-
 ```
+
+This is relatively simple. Now I just download the data, save it as a CSV, and process in ArcGIS.
 
 ## Download, Save, Use ArcGiS
 ```
@@ -121,19 +127,19 @@ df.head()
 df.to_csv('to_geocode.csv') ## For later load, not to sync.
 ```
 
-After geocoding, I upload back to GCP, BQ and create a table called *geoCoded0724*
+This file is called **geocode.py**.
 
 
-# Pre Machine Learning
----
-#### <span style="color: red;">External Data</span>. Files uploaded to GCP and then manually created in BQ. 
-#### <span style="color: grey;">Views</span> : Big Query views save storage by not actually saving a table. 
-#### <span style="color: black;">Tables</span> : Queries that create tables.
-#### <span style="color: purple;">Functions</span> : Table functions.
 
------
+After geocoding, I upload back to GCP -- the file is called MASTER_ADDRESSES_072423, BQ and create a table called *geoCoded0724*
 
-* <span style="color: red;">combined_0724</span>: This is the "rawest form of the data. It shouldn't be altered. It's built from the CSV files." From here, 
+Here is a recap thus far:
+
+1) Data is delivered in CSV files. I clean the headers and save the files in a folder called **fix_headers**. I then upload the files to GCP and Big Query, to a table called **combined_0724**
+2) I then extract all unique addresses from the data, and save the table as **masterAddresses**. I then download the data, geocode it, and upload it back to GCP (**MASTER_ADDRESSES_072423**) and BQ. The table is called **geoCoded0724**.
+
+
+* <span style="color: red;">combined_0724</span>: This is the "rawest form of the data. It shouldn't be altered. It's built from the CSV files." From here,
 
 * <span style="color: grey;">masterRegistrants</span> : All grey entries indicate a "view" that is created in BQ. This view creates a set of master addresses from the <span style="color: red;">combined_0724</span> data
 
@@ -145,7 +151,7 @@ After geocoding, I upload back to GCP, BQ and create a table called *geoCoded072
 
 * <span style="color: grey;">fullDataGeo</span> :This is a view. It's the full dataset, with addresses. It creates a set of master addresses from the <span style="color: red;">combined_0724</span> data
 
-* <span style="color: pink;">comp</span> :This is a function. It processes movement to different addresses. 
+* <span style="color: pink;">comp</span> :This is a function. It processes movement to different addresses.
 
 * <span style="color: grey;">changeAddress</span> :This view generates a series of comparisons, then a table from the <span style="color: pink;">comp</span> function.
 
@@ -583,15 +589,15 @@ FROM
   `az-voter-file.AVPv2.dataForML`
 
   ```
- 
- 
+
+
  # Download Data, Analysis
  Use VSCode or Rstudio or something or whatever to pull in to local machine. This file is called *download.py*
-  
-  
+
+
   ## Data
-  
-  The data can be pulled from a BQ table. I do this here, and save the files to my machine. 
+
+  The data can be pulled from a BQ table. I do this here, and save the files to my machine.
  ```{python}
 # Formulate the SQL query to pull the data from BigQuery
 
@@ -657,10 +663,10 @@ df.to_pickle('/Users/Chris/Dropbox/masterData/voterFile/voterActionable.pkl')
 df.to_csv('/Users/Chris/Dropbox/masterData/voterFile/voterActionable.csv')  #
 
  ```
- 
+
  ## Building a Voter Engagement Score
 Process the data and run a latent variable model. This file is called **latent.r**
- 
+
  ```{r}
 library(lavaanPlot)
 library(lavaan)
@@ -732,7 +738,7 @@ df %>%
   write.csv("voter_file_latent_.csv", row.names = FALSE)
 
 ```
- 
+
  And then process the data again in python, run some simple ML models using tensorflow, construct the data, and output a file called **eng_pred_localscores.csv**. The python file that runs everything below is called **ml_upload.py**
 
 ```{python}
@@ -941,16 +947,16 @@ county_block.to_gbq(project_table, project_id,
 
 ## Data for Visualization and Further Analysis
 
-**eng_pred_localscores.csv** is uploaded to a Google Bucket. I then create a BQ table called <span style="color: red;">fullDataPostML</span>. 
+**eng_pred_localscores.csv** is uploaded to a Google Bucket. I then create a BQ table called <span style="color: red;">fullDataPostML</span>.
 
 ---
-#### <span style="color: red;">External Data</span>. Files uploaded to GCP and then manually created in BQ. 
-#### <span style="color: grey;">Views</span> : Big Query views save storage by not actually saving a table. 
+#### <span style="color: red;">External Data</span>. Files uploaded to GCP and then manually created in BQ.
+#### <span style="color: grey;">Views</span> : Big Query views save storage by not actually saving a table.
 #### <span style="color: black;">Tables</span> : Queries that create tables.
 #### <span style="color: purple;">Functions</span> : Table functions.
 
 -----
- 
+
 
 * <span style="color: black;">data_merged</span> :This is a table. It's the full dataset, with addresses. It creates a set of master addresses from the <span style="color: red;">fullDataPostML</span> data
 
@@ -1205,7 +1211,7 @@ CREATE OR REPLACE TABLE
     centroids.centroid_longitude as centroid_longitude,
     centroids.centroid_latitude as centroid_latitude,
   FROM
-    `bigquery-public-data.census_bureau_acs.blockgroup_2018_5yr` as a JOIN 
+    `bigquery-public-data.census_bureau_acs.blockgroup_2018_5yr` as a JOIN
     `az-voter-file.AVPv2.centroids` as centroids
   ON
     a.geo_id = centroids.census_block);
@@ -1223,7 +1229,7 @@ CREATE OR REPLACE TABLE
     WHERE
       state_fips_code = "04" )
   SELECT
-    * 
+    *
   FROM
     `az-voter-file.censusData.county` AS t1
   JOIN
@@ -1284,7 +1290,7 @@ SELECT
   JOIN
     `az-voter-file.AVPv2.blockAggregates` AS block
   ON
-    block.census_block_ = star.census_block  
+    block.census_block_ = star.census_block
   );
 CREATE OR REPLACE TABLE
   `az-voter-file.AVPv2.blockAggregates`AS(
@@ -1325,7 +1331,7 @@ CREATE OR REPLACE TABLE
     s3 )
 ```
 
-## Public Opinion  
+## Public Opinion
 
 ```{R}
 library(haven)
@@ -1610,7 +1616,7 @@ Upload to GCP then create a table called **PublicOpinion_Fall2022**. Then, here 
 ```{sql}
   -- Four Tables
   -- (3) Aggregates from voter file, CD, LD, County
-  -- (1) Public Opinion data, 
+  -- (1) Public Opinion data,
 CREATE OR REPLACE TABLE `az-voter-file.AVPv2.poLD` as(
 WITH
   aggregates AS (
@@ -1683,7 +1689,7 @@ FROM
 
 
 CREATE OR REPLACE TABLE `az-voter-file.AVPv2.public_opinion_actionable` as(
-with county as (SELECT 
+with county as (SELECT
 t1.*,
 t2.* except(County)
   FROM `az-voter-file.AVPv2.PublicOpinion_Fall2022` as t1 JOIN  `az-voter-file.AVPv2.poCounty` as t2 ON
@@ -1692,7 +1698,7 @@ t2.* except(County)
 SELECT
 t1.*,
 t2.* except(LD)
-  FROM county as t1 
+  FROM county as t1
   JOIN  `az-voter-file.AVPv2.poLD` as t2 ON
   cast(t1.LD as string) = t2.LD
   JOIN  `az-voter-file.AVPv2.poCD` as t3 ON
@@ -1704,7 +1710,7 @@ SELECt
 FROM `az-voter-file.AVPv2.public_opinion_actionable`
 ```
 
-## Precincts  
+## Precincts
 
 ```{sql}
 CREATE OR REPLACE TABLE `az-voter-file.AVPv2.precinctsGold` AS (
